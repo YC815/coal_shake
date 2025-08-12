@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>搖搖可樂</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: linear-gradient(135deg, #8B4513 0%, #A0522D 50%, #CD853F 100%);
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      user-select: none;
+      position: relative;
+    }
+    .game-container { width: 100vw; height: 100vh; position: relative; }
+    .bubble {
+      position: absolute;
+      background: radial-gradient(circle, rgba(255,255,255,0.9) 0%,
+        rgba(255,255,255,0.6) 50%, rgba(255,255,255,0.3) 80%, transparent 100%);
+      border-radius: 50%;
+      animation: bubble-rise linear forwards;
+      pointer-events: none;
+    }
+    @keyframes bubble-rise {
+      0%   { opacity: 0; transform: translateY(0) scale(0.5); }
+      10%  { opacity: 1; transform: translateY(-10vh) scale(1); }
+      90%  { opacity: 1; }
+      100% { opacity: 0; transform: translateY(-100vh) scale(1.2); }
+    }
+    .start-screen, .game-over-screen {
+      position: absolute; inset: 0;
+      background: rgba(139, 69, 19, 0.95);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 1000;
+      padding: 24px;
+      text-align: center;
+    }
+    .start-btn, .restart-btn {
+      padding: 16px 32px; border: none; border-radius: 50px;
+      font-size: 22px; font-weight: bold;
+      background: linear-gradient(45deg, #FF6B35, #FF8E53); color: white; cursor: pointer;
+      box-shadow: 0 8px 25px rgba(0,0,0,0.3); transition: all 0.25s ease;
+    }
+    .start-btn:hover, .restart-btn:hover { transform: translateY(-3px); box-shadow: 0 12px 35px rgba(0,0,0,0.4); }
+    .title {
+      color: white; font-size: 44px; font-weight: bold;
+      text-shadow: 3px 3px 6px rgba(0,0,0,0.5); margin-bottom: 16px;
+    }
+    .game-over-title {
+      color: #FFD700; font-size: 36px; font-weight: bold;
+      text-shadow: 3px 3px 6px rgba(0,0,0,0.7); margin-bottom: 16px;
+      animation: explosion-text 0.5s ease-out;
+    }
+    @keyframes explosion-text {
+      0% { transform: scale(0); opacity: 0; }
+      50% { transform: scale(1.2); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .explosion-effect {
+      position: absolute; top: 50%; left: 50%;
+      width: 300px; height: 300px;
+      background: radial-gradient(circle,
+        rgba(255,255,255,1) 0%,
+        rgba(255,215,0,0.9) 20%,
+        rgba(255,165,0,0.8) 40%,
+        rgba(255,69,0,0.6) 60%,
+        rgba(220,20,60,0.4) 80%,
+        transparent 100%);
+      border-radius: 50%;
+      transform: translate(-50%, -50%) scale(0);
+      animation: explode 0.8s ease-out forwards;
+      pointer-events: none; z-index: 999;
+    }
+    @keyframes explode {
+      0%   { transform: translate(-50%, -50%) scale(0); opacity: 1; }
+      50%  { transform: translate(-50%, -50%) scale(1.5); opacity: 0.9; }
+      100% { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+    }
+    .shake-intensity { animation: screen-shake 0.1s ease-in-out; }
+    @keyframes screen-shake {
+      0%, 100% { transform: translateX(0) translateY(0); }
+      25%      { transform: translateX(-2px) translateY(-2px); }
+      50%      { transform: translateX(2px)  translateY(-2px); }
+      75%      { transform: translateX(-2px) translateY(2px); }
+    }
+    .hidden { display: none; }
+    .instruction {
+      color: rgba(255,255,255,0.9);
+      font-size: 16px; line-height: 1.5; margin-bottom: 24px;
+      text-shadow: 1px 1px 3px rgba(0,0,0,0.5);
+    }
+    .hud {
+      position: absolute; top: 8px; left: 8px; right: 8px;
+      display: flex; gap: 8px; justify-content: space-between; align-items: center;
+      color: white; font-weight: 600; text-shadow: 1px 1px 3px rgba(0,0,0,0.6);
+      z-index: 10; pointer-events: none;
+    }
+    .badge {
+      background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.2);
+      padding: 6px 10px; border-radius: 10px; font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="game-container" id="game-container">
+    <div class="hud" id="hud">
+      <div class="badge">氣泡：<span id="bubble-count">0</span></div>
+      <div class="badge">震動：<span id="vibe-level">0</span></div>
+      <div class="badge">閾值：<span id="threshold">—</span></div>
+    </div>
+
+    <!-- 開始畫面 -->
+    <div class="start-screen" id="start-screen">
+      <div class="title">🥤 搖搖可樂</div>
+      <div class="instruction">
+        搖晃手機增加氣泡（或點螢幕）<br />
+        iPhone 會在按下「開始遊戲」後詢問動作感測權限。
+      </div>
+      <button class="start-btn" id="start-btn" type="button">開始遊戲</button>
+    </div>
+
+    <!-- 遊戲結束畫面 -->
+    <div class="game-over-screen hidden" id="game-over-screen">
+      <div class="game-over-title">💥 可樂爆炸了！</div>
+      <div class="instruction">你輸了！再試一次吧～</div>
+      <button class="restart-btn" id="restart-btn" type="button">重新開始</button>
+    </div>
+  </div>
+
+  <script>
+    class ColaShakeGame {
+      constructor() {
+        this.isGameActive = false;
+        this.bubbleCount = 0;
+        this.explosionThreshold = 40 + Math.random() * 20; // 40–60
+        this.lastShakeTime = 0;
+        this.lastAcceleration = { x: 0, y: 0, z: 0 };
+        this.activeBubbles = 0;
+        this.maxBubbles = 100;
+        this.vibrationLevel = 0;
+        this.vibrationInterval = null;
+        this.needsPermission = false;
+        this._boundMotionHandler = this._motionHandler.bind(this);
+        this._audioCtx = null;
+
+        this._initEls();
+        this._initEvents();
+        this._initMotion();
+        this._syncHUD();
+      }
+
+      _initEls() {
+        this.gameContainer = document.getElementById('game-container');
+        this.startScreen = document.getElementById('start-screen');
+        this.gameOverScreen = document.getElementById('game-over-screen');
+        this.startBtn = document.getElementById('start-btn');
+        this.restartBtn = document.getElementById('restart-btn');
+        this.$bubble = document.getElementById('bubble-count');
+        this.$vibe = document.getElementById('vibe-level');
+        this.$thre = document.getElementById('threshold');
+      }
+      _initEvents() {
+        this.startBtn.addEventListener('click', () => this.startGame(), { passive: true });
+        this.restartBtn.addEventListener('click', () => this.resetGame(), { passive: true });
+        // 點背景也算一次搖晃
+        this.gameContainer.addEventListener('click', (e) => {
+          if (this.isGameActive && e.target === this.gameContainer) this.handleShake(8);
+        }, { passive: true });
+      }
+      _initMotion() {
+        if (typeof DeviceMotionEvent !== 'undefined' &&
+            typeof DeviceMotionEvent.requestPermission === 'function') {
+          this.needsPermission = true;
+        } else if (window.DeviceMotionEvent) {
+          window.addEventListener('devicemotion', this._boundMotionHandler, { passive: true });
+          this._startContinuousVibration();
+        }
+      }
+      async _requestMotionPermission() {
+        if (!this.needsPermission) return;
+        try {
+          const state = await DeviceMotionEvent.requestPermission();
+          if (state === 'granted') {
+            window.addEventListener('devicemotion', this._boundMotionHandler, { passive: true });
+            this._startContinuousVibration();
+          } else {
+            alert('需要動作感測權限才能偵測搖晃，請用點擊螢幕來玩！');
+          }
+        } catch (err) {
+          alert('需要動作感測權限才能偵測搖晃，請用點擊螢幕來玩！');
+        }
+      }
+      _motionHandler(event) {
+        if (!this.isGameActive) return;
+        const a = event.accelerationIncludingGravity || {};
+        const x = a.x || 0, y = a.y || 0, z = a.z || 0;
+        const dx = Math.abs(x - this.lastAcceleration.x);
+        const dy = Math.abs(y - this.lastAcceleration.y);
+        const dz = Math.abs(z - this.lastAcceleration.z);
+        const shake = dx + dy + dz;
+        this.lastAcceleration = { x, y, z };
+        if (shake > 8) {
+          const now = Date.now();
+          if (now - this.lastShakeTime > 150) {
+            this.handleShake(shake);
+            this.lastShakeTime = now;
+          }
+        }
+      }
+      _startContinuousVibration() {
+        if (this.vibrationInterval) return;
+        this.vibrationInterval = setInterval(() => {
+          if (this.isGameActive && this.vibrationLevel > 0) {
+            const intensity = Math.min(this.vibrationLevel * 10, 100);
+            const frequency = Math.max(2000 - (this.vibrationLevel * 150), 300);
+            if ('vibrate' in navigator) navigator.vibrate(intensity);
+            clearInterval(this.vibrationInterval);
+            this.vibrationInterval = null;
+            setTimeout(() => this._startContinuousVibration(), frequency);
+          }
+        }, 1000);
+      }
+      async startGame() {
+        this.isGameActive = true;
+        this.bubbleCount = 0;
+        this.activeBubbles = 0;
+        this.vibrationLevel = 0;
+        this.explosionThreshold = 40 + Math.random() * 20;
+        this.startScreen.classList.add('hidden');
+        this._syncHUD();
+        await this._requestMotionPermission();
+        this._playTone('start');
+      }
+      handleShake(intensity = 10) {
+        if (!this.isGameActive || this.activeBubbles >= this.maxBubbles) return;
+        this.gameContainer.classList.add('shake-intensity');
+        setTimeout(() => this.gameContainer.classList.remove('shake-intensity'), 100);
+
+        const mult = Math.min(Math.floor(intensity / 5), 3);
+        const inc = (2 + Math.floor(Math.random() * 3)) * mult;
+        this.bubbleCount += inc;
+        this.vibrationLevel = Math.min(Math.floor(this.bubbleCount / 6), 10);
+        for (let i = 0; i < inc; i++) setTimeout(() => this._createBubble(), i * 25);
+        this._playTone('bubble');
+        this._syncHUD();
+
+        if (this.bubbleCount >= this.explosionThreshold) {
+          setTimeout(() => this._explode(), 200);
+        }
+      }
+      _createBubble() {
+        if (!this.isGameActive) return;
+        const el = document.createElement('div');
+        el.className = 'bubble';
+        const size = 8 + Math.random() * 25;
+        el.style.width = size + 'px';
+        el.style.height = size + 'px';
+        el.style.left = (5 + Math.random() * 90) + '%';
+        el.style.bottom = '0px';
+        el.style.animationDuration = (3 + Math.random() * 4) + 's';
+        this.gameContainer.appendChild(el);
+        this.activeBubbles++;
+        setTimeout(() => { if (el.parentNode) { el.remove(); this.activeBubbles--; } }, 7000);
+      }
+      _explode() {
+        this.isGameActive = false;
+        this.vibrationLevel = 0;
+        if (this.vibrationInterval) { clearInterval(this.vibrationInterval); this.vibrationInterval = null; }
+        const fx = document.createElement('div');
+        fx.className = 'explosion-effect';
+        this.gameContainer.appendChild(fx);
+        this._playTone('explosion');
+        if ('vibrate' in navigator) navigator.vibrate([300, 100, 300, 100, 500]);
+        setTimeout(() => { this.gameOverScreen.classList.remove('hidden'); fx.remove(); }, 800);
+        setTimeout(() => this._clearBubbles(), 1000);
+        this._syncHUD();
+      }
+      resetGame() {
+        this.isGameActive = false;
+        this.bubbleCount = 0;
+        this.activeBubbles = 0;
+        this.vibrationLevel = 0;
+        if (this.vibrationInterval) { clearInterval(this.vibrationInterval); this.vibrationInterval = null; }
+        this._clearBubbles();
+        this.gameOverScreen.classList.add('hidden');
+        this.startScreen.classList.remove('hidden');
+        const fx = document.querySelectorAll('.explosion-effect');
+        fx.forEach(el => el.remove());
+        this._syncHUD();
+      }
+      _clearBubbles() {
+        document.querySelectorAll('.bubble').forEach(b => b.remove());
+        this.activeBubbles = 0;
+      }
+      _syncHUD() {
+        this.$bubble.textContent = this.bubbleCount;
+        this.$vibe.textContent = this.vibrationLevel;
+        this.$thre.textContent = this.isGameActive ? Math.round(this.explosionThreshold) : '—';
+      }
+      _ensureAudio() {
+        if (!('AudioContext' in window || 'webkitAudioContext' in window)) return null;
+        if (!this._audioCtx) {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          this._audioCtx = new Ctx();
+        }
+        if (this._audioCtx.state === 'suspended') this._audioCtx.resume();
+        return this._audioCtx;
+      }
+      _playTone(type) {
+        const ctx = this._ensureAudio();
+        if (!ctx) return;
+        let frequency = 440, duration = 0.15, wave = 'sine';
+        if (type === 'bubble') { frequency = 600 + Math.random() * 400; duration = 0.08; }
+        else if (type === 'explosion') { frequency = 80; duration = 0.6; wave = 'sawtooth'; }
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.setValueAtTime(frequency, ctx.currentTime);
+        osc.type = wave;
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.06, ctx.currentTime + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + duration);
+      }
+    }
+    document.addEventListener('DOMContentLoaded', () => new ColaShakeGame());
+  </script>
+</body>
+</html>
